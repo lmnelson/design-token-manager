@@ -1,10 +1,48 @@
 'use client';
 
-import React, { useCallback } from 'react';
-import { Copy, Trash2, Unlink, ArrowLeftRight, Pencil } from 'lucide-react';
+import React, { useCallback, useState } from 'react';
+import {
+  Copy,
+  Trash2,
+  Unlink,
+  ArrowLeftRight,
+  Pencil,
+  Plus,
+  Palette,
+  Ruler,
+  Type,
+  Hash,
+  Clock,
+  Square,
+  Sparkles,
+  CircleDot,
+  Layers,
+  FolderPlus,
+  ChevronRight,
+} from 'lucide-react';
 import { usePipelineStore } from '@/stores/pipelineStore';
 import { isDesignToken } from '@/types/tokens';
-import type { DesignTokenFile, DesignToken } from '@/types/tokens';
+import type { DesignTokenFile, DesignToken, TokenType } from '@/types/tokens';
+
+interface TokenTypeOption {
+  type: TokenType;
+  label: string;
+  icon: React.ReactNode;
+  defaultValue: unknown;
+}
+
+const TOKEN_TYPES: TokenTypeOption[] = [
+  { type: 'color', label: 'Color', icon: <Palette className="w-4 h-4" />, defaultValue: '#000000' },
+  { type: 'dimension', label: 'Dimension', icon: <Ruler className="w-4 h-4" />, defaultValue: '16px' },
+  { type: 'number', label: 'Number', icon: <Hash className="w-4 h-4" />, defaultValue: 0 },
+  { type: 'fontFamily', label: 'Font Family', icon: <Type className="w-4 h-4" />, defaultValue: 'Inter' },
+  { type: 'fontWeight', label: 'Font Weight', icon: <Type className="w-4 h-4" />, defaultValue: 400 },
+  { type: 'duration', label: 'Duration', icon: <Clock className="w-4 h-4" />, defaultValue: '200ms' },
+  { type: 'shadow', label: 'Shadow', icon: <Layers className="w-4 h-4" />, defaultValue: '0 2px 4px rgba(0,0,0,0.1)' },
+  { type: 'border', label: 'Border', icon: <Square className="w-4 h-4" />, defaultValue: '1px solid #000000' },
+  { type: 'gradient', label: 'Gradient', icon: <Sparkles className="w-4 h-4" />, defaultValue: 'linear-gradient(90deg, #000 0%, #fff 100%)' },
+  { type: 'cubicBezier', label: 'Easing', icon: <CircleDot className="w-4 h-4" />, defaultValue: [0.4, 0, 0.2, 1] },
+];
 
 interface NodeContextMenuProps {
   nodeId: string;
@@ -25,7 +63,7 @@ export function NodeContextMenu({
   position,
   onClose,
 }: NodeContextMenuProps) {
-  const { getActivePage, updatePageTokens } = usePipelineStore();
+  const { getActivePage, updatePageTokens, setNewlyCreatedTokenPath } = usePipelineStore();
 
   // Helper to get a token at a path
   const getTokenAtPath = useCallback((tokens: DesignTokenFile, path: string[]): unknown => {
@@ -238,13 +276,143 @@ export function NodeContextMenu({
     onClose();
   }, [getActivePage, deleteAtPath, updatePageTokens, nodePath, onClose]);
 
+  // Handle adding a token to a group
+  const handleAddToken = useCallback((tokenType: TokenTypeOption) => {
+    const activePage = getActivePage();
+    if (!activePage) {
+      onClose();
+      return;
+    }
+
+    // Generate a unique name
+    const baseName = `new-${tokenType.type}`;
+    let name = baseName;
+    let counter = 1;
+
+    // Helper to check if path exists
+    const pathExists = (tokens: DesignTokenFile, path: string[]): boolean => {
+      let current: unknown = tokens;
+      for (const key of path) {
+        if (current && typeof current === 'object' && key in current) {
+          current = (current as Record<string, unknown>)[key];
+        } else {
+          return false;
+        }
+      }
+      return true;
+    };
+
+    // Find unique name within the group
+    while (pathExists(activePage.tokens, [...nodePath, name])) {
+      name = `${baseName}-${counter}`;
+      counter++;
+    }
+
+    // Create the token
+    const newToken = {
+      $value: tokenType.defaultValue,
+      $type: tokenType.type,
+    };
+
+    // Add to the group
+    const newPath = [...nodePath, name];
+    const newTokens = setAtPath(activePage.tokens, newPath, newToken);
+    updatePageTokens(activePage.id, newTokens);
+    // Notify sidebar to highlight and edit the new token
+    setNewlyCreatedTokenPath(newPath);
+    onClose();
+  }, [getActivePage, setAtPath, updatePageTokens, nodePath, onClose, setNewlyCreatedTokenPath]);
+
+  // Handle adding a subgroup
+  const handleAddGroup = useCallback(() => {
+    const activePage = getActivePage();
+    if (!activePage) {
+      onClose();
+      return;
+    }
+
+    // Generate a unique name
+    const baseName = 'new-group';
+    let name = baseName;
+    let counter = 1;
+
+    const pathExists = (tokens: DesignTokenFile, path: string[]): boolean => {
+      let current: unknown = tokens;
+      for (const key of path) {
+        if (current && typeof current === 'object' && key in current) {
+          current = (current as Record<string, unknown>)[key];
+        } else {
+          return false;
+        }
+      }
+      return true;
+    };
+
+    while (pathExists(activePage.tokens, [...nodePath, name])) {
+      name = `${baseName}-${counter}`;
+      counter++;
+    }
+
+    // Create empty group
+    const newPath = [...nodePath, name];
+    const newTokens = setAtPath(activePage.tokens, newPath, {});
+    updatePageTokens(activePage.id, newTokens);
+    // Notify sidebar to highlight and edit the new group
+    setNewlyCreatedTokenPath(newPath);
+    onClose();
+  }, [getActivePage, setAtPath, updatePageTokens, nodePath, onClose, setNewlyCreatedTokenPath]);
+
+  // Track submenu visibility for groups
+  const [showTokenSubmenu, setShowTokenSubmenu] = useState(false);
+
   // Show menu for group nodes
   if (nodeType === 'tokenGroup') {
     return (
       <div
-        className="fixed z-50 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[160px]"
+        className="fixed z-50 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[180px]"
         style={{ left: position.x, top: position.y }}
       >
+        {/* Add Token with submenu */}
+        <div
+          className="relative"
+          onMouseEnter={() => setShowTokenSubmenu(true)}
+          onMouseLeave={() => setShowTokenSubmenu(false)}
+        >
+          <button className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+            <span className="flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              Add Token
+            </span>
+            <ChevronRight className="w-3 h-3 text-gray-400" />
+          </button>
+          {showTokenSubmenu && (
+            <div className="absolute left-full top-0 ml-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[160px]">
+              {TOKEN_TYPES.map((tokenType) => (
+                <button
+                  key={tokenType.type}
+                  onClick={() => handleAddToken(tokenType)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  {tokenType.icon}
+                  {tokenType.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Add Group */}
+        <button
+          onClick={handleAddGroup}
+          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+        >
+          <FolderPlus className="w-4 h-4" />
+          Add Group
+        </button>
+
+        <div className="h-px bg-gray-200 dark:bg-gray-700 my-1" />
+
+        {/* Rename */}
         <button
           onClick={handleRename}
           className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -252,7 +420,10 @@ export function NodeContextMenu({
           <Pencil className="w-4 h-4" />
           Rename Group
         </button>
+
         <div className="h-px bg-gray-200 dark:bg-gray-700 my-1" />
+
+        {/* Delete */}
         <button
           onClick={handleDeleteGroup}
           className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"

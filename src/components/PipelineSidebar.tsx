@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import {
   ChevronRight,
   ChevronDown,
@@ -8,12 +8,29 @@ import {
   FileText,
   Files,
   Database,
+  Plus,
+  Settings,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePipelineStore } from '@/stores/pipelineStore';
-import { formatSlotName } from '@/types/pipeline';
+import { formatSlotName, PIPELINE_TEMPLATES } from '@/types/pipeline';
 import type { PipelineLayer } from '@/types/pipeline';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+} from '@/components/ui/dropdown-menu';
 import { TokenListPanel } from './TokenListPanel';
+import { PipelineEditor } from './PipelineEditor';
 
 interface LayerItemProps {
   layer: PipelineLayer;
@@ -31,7 +48,10 @@ function LayerItem({ layer, isExpanded, onToggle }: LayerItemProps) {
     getOrCreatePage,
     setActivePage,
     setViewContext,
+    removeLayer,
   } = usePipelineStore();
+
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   const slots = getLayerSlots(layer);
   const hasSlots = slots.length > 1 || (slots.length === 1 && Object.keys(slots[0]).length > 0);
@@ -71,10 +91,31 @@ function LayerItem({ layer, isExpanded, onToggle }: LayerItemProps) {
     setViewContext({ layerId: layer.id, isSchemaView: false, variableValues: slot });
   }, [layer.id, getOrCreatePage, setActivePage, setViewContext]);
 
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleDeleteLayer = useCallback(() => {
+    if (confirm(`Delete layer "${layer.name}"? This will remove all tokens in this layer.`)) {
+      removeLayer(layer.id);
+    }
+    setContextMenu(null);
+  }, [layer.id, layer.name, removeLayer]);
+
+  // Close context menu when clicking elsewhere
+  useEffect(() => {
+    if (contextMenu) {
+      const handleClick = () => setContextMenu(null);
+      window.addEventListener('click', handleClick);
+      return () => window.removeEventListener('click', handleClick);
+    }
+  }, [contextMenu]);
+
   const isStaticLayerActive = staticPage && staticPage.id === activePageId;
 
   return (
-    <div className="border-b border-gray-100 dark:border-gray-800 last:border-b-0">
+    <div className="border-b border-gray-100 dark:border-gray-800 last:border-b-0 relative">
       {/* Layer Header */}
       <div
         className={cn(
@@ -82,6 +123,7 @@ function LayerItem({ layer, isExpanded, onToggle }: LayerItemProps) {
           (isSchemaViewActive || (!hasSlots && isStaticLayerActive)) && 'bg-blue-50 dark:bg-blue-900/20'
         )}
         onClick={handleLayerHeaderClick}
+        onContextMenu={handleContextMenu}
       >
         {/* Expand/collapse chevron for layers with slots */}
         {hasSlots && (
@@ -100,7 +142,7 @@ function LayerItem({ layer, isExpanded, onToggle }: LayerItemProps) {
         {/* Layer type icon */}
         <span className="w-4 h-4 flex items-center justify-center">
           {hasSlots ? (
-            <Files className="w-3 h-3 text-indigo-500" />
+            <Files className="w-3 h-3 text-gray-400" />
           ) : (
             <FileText className="w-3 h-3 text-gray-400" />
           )}
@@ -173,19 +215,68 @@ function LayerItem({ layer, isExpanded, onToggle }: LayerItemProps) {
           })}
         </div>
       )}
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[140px]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={handleDeleteLayer}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete Layer
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
 export function PipelineSidebar() {
-  const { pipeline, activePageId, pages, getActivePage, viewContext } = usePipelineStore();
+  const { pipeline, activePageId, pages, getActivePage, viewContext, addLayer, createFromTemplate } = usePipelineStore();
   const [expandedLayers, setExpandedLayers] = useState<Set<string>>(new Set());
   const [mounted, setMounted] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [addLayerOpen, setAddLayerOpen] = useState(false);
+  const [newLayerName, setNewLayerName] = useState('');
+  const newLayerInputRef = useRef<HTMLInputElement>(null);
 
   // Prevent hydration mismatch by only rendering dynamic content after mount
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Focus input when popover opens
+  useEffect(() => {
+    if (addLayerOpen && newLayerInputRef.current) {
+      newLayerInputRef.current.focus();
+    }
+  }, [addLayerOpen]);
+
+  const handleAddLayerSubmit = useCallback(() => {
+    if (newLayerName.trim()) {
+      addLayer({
+        name: newLayerName.trim(),
+        variables: [],
+        required: true,
+      });
+      setNewLayerName('');
+      setAddLayerOpen(false);
+    }
+  }, [addLayer, newLayerName]);
+
+  const handleAddLayerKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleAddLayerSubmit();
+    } else if (e.key === 'Escape') {
+      setNewLayerName('');
+      setAddLayerOpen(false);
+    }
+  }, [handleAddLayerSubmit]);
 
   const toggleLayer = useCallback((layerId: string) => {
     setExpandedLayers(prev => {
@@ -224,11 +315,98 @@ export function PipelineSidebar() {
     <div className="h-full flex flex-col">
       {/* Layers header */}
       <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center gap-2">
-          <Layers className="w-4 h-4 text-gray-500" />
-          <h2 className="font-semibold text-sm text-gray-700 dark:text-gray-300">
-            Layers
-          </h2>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-gray-500" />
+            <h2 className="font-semibold text-sm text-gray-700 dark:text-gray-300">
+              Layers
+            </h2>
+          </div>
+          <div className="flex items-center gap-1">
+            {/* Add Layer button with popover */}
+            <Popover open={addLayerOpen} onOpenChange={setAddLayerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  title="Add layer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-2" align="start" side="bottom">
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                    Layer Name
+                  </label>
+                  <Input
+                    ref={newLayerInputRef}
+                    value={newLayerName}
+                    onChange={(e) => setNewLayerName(e.target.value)}
+                    onKeyDown={handleAddLayerKeyDown}
+                    placeholder="Enter layer name..."
+                    className="h-8 text-sm"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        setNewLayerName('');
+                        setAddLayerOpen(false);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={handleAddLayerSubmit}
+                      disabled={!newLayerName.trim()}
+                    >
+                      Add
+                    </Button>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+            {/* Settings dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" title="Pipeline settings">
+                  <Settings className="w-3.5 h-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setEditorOpen(true)}>
+                  <Settings className="w-4 h-4 mr-2" />
+                  Edit Pipeline
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <Layers className="w-4 h-4 mr-2" />
+                    Load Template
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {PIPELINE_TEMPLATES.map((template, index) => (
+                      <DropdownMenuItem
+                        key={index}
+                        onClick={() => createFromTemplate(index)}
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-medium">{template.name}</span>
+                          <span className="text-xs text-gray-500">{template.description}</span>
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
 
@@ -258,7 +436,7 @@ export function PipelineSidebar() {
           <div className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
             {viewContext.isSchemaView ? (
               <>
-                <Files className="w-3 h-3 text-indigo-500" />
+                <Files className="w-3 h-3 text-gray-400" />
                 {pipeline.layers.find(l => l.id === viewContext.layerId)?.name || 'Layer'}
                 <span className="text-xs text-gray-500">(keys only)</span>
               </>
@@ -276,6 +454,9 @@ export function PipelineSidebar() {
           )}
         </div>
       )}
+
+      {/* Pipeline Editor Dialog */}
+      <PipelineEditor open={editorOpen} onOpenChange={setEditorOpen} />
     </div>
   );
 }

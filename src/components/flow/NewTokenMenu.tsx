@@ -49,7 +49,7 @@ export function NewTokenMenu({
   onClose,
   onTokenCreated,
 }: NewTokenMenuProps) {
-  const { getActivePage, updatePageTokens } = usePipelineStore();
+  const { getActivePage, updatePageTokens, setNewlyCreatedTokenPath } = usePipelineStore();
 
   const handleCreateToken = useCallback((tokenType: TokenTypeOption) => {
     const activePage = getActivePage();
@@ -97,10 +97,13 @@ export function NewTokenMenu({
     }
     current[name] = newToken;
 
+    const newPath = [...parentPath, name];
     updatePageTokens(activePage.id, newTokens);
-    onTokenCreated?.([...parentPath, name]);
+    // Notify sidebar to highlight and edit the new token
+    setNewlyCreatedTokenPath(newPath);
+    onTokenCreated?.(newPath);
     onClose();
-  }, [getActivePage, updatePageTokens, parentPath, onClose, onTokenCreated]);
+  }, [getActivePage, updatePageTokens, parentPath, onClose, onTokenCreated, setNewlyCreatedTokenPath]);
 
   const handleCreateGroup = useCallback(() => {
     const activePage = getActivePage();
@@ -140,10 +143,13 @@ export function NewTokenMenu({
     }
     current[name] = {};
 
+    const newPath = [...parentPath, name];
     updatePageTokens(activePage.id, newTokens);
-    onTokenCreated?.([...parentPath, name]);
+    // Notify sidebar to highlight and edit the new group
+    setNewlyCreatedTokenPath(newPath);
+    onTokenCreated?.(newPath);
     onClose();
-  }, [getActivePage, updatePageTokens, parentPath, onClose, onTokenCreated]);
+  }, [getActivePage, updatePageTokens, parentPath, onClose, onTokenCreated, setNewlyCreatedTokenPath]);
 
   return (
     <div

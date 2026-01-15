@@ -73,6 +73,8 @@ interface PipelineStore {
   activePageId: string | null;
   selectedBuildConfig: BuildConfig | null;
   viewContext: LayerViewContext | null;
+  newlyCreatedTokenPath: string[] | null;
+  sidebarSelectedTokenPath: string[] | null;
 
   // View context management
   setViewContext: (context: LayerViewContext | null) => void;
@@ -136,6 +138,13 @@ interface PipelineStore {
 
   // Build preview
   getBuildPreview: (platformId: string | null, format: OutputFormat) => string;
+
+  // Newly created token tracking (for auto-focus in sidebar)
+  setNewlyCreatedTokenPath: (path: string[] | null) => void;
+  clearNewlyCreatedTokenPath: () => void;
+
+  // Sidebar selection (for canvas highlighting)
+  setSidebarSelectedTokenPath: (path: string[] | null) => void;
 }
 
 // Default pipeline (Simple Light/Dark)
@@ -245,6 +254,8 @@ export const usePipelineStore = create<PipelineStore>()(
       activePageId: 'page-primitives',
       selectedBuildConfig: null,
       viewContext: null,
+      newlyCreatedTokenPath: null,
+      sidebarSelectedTokenPath: null,
 
       // View context management
       setViewContext: (context) => {
@@ -827,6 +838,20 @@ export const usePipelineStore = create<PipelineStore>()(
         }
 
         return buildPreviewFn(tokens, platform, format);
+      },
+
+      // Newly created token tracking
+      setNewlyCreatedTokenPath: (path) => {
+        set({ newlyCreatedTokenPath: path });
+      },
+
+      clearNewlyCreatedTokenPath: () => {
+        set({ newlyCreatedTokenPath: null });
+      },
+
+      // Sidebar selection
+      setSidebarSelectedTokenPath: (path) => {
+        set({ sidebarSelectedTokenPath: path });
       },
     }),
     {

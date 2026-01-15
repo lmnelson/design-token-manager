@@ -189,6 +189,9 @@ function TokenEditorContent() {
     setViewContext,
     getLayerSchemaKeys,
     getPageExtendedKeys,
+    sidebarSelectedTokenPath,
+    setSidebarSelectedTokenPath,
+    setNewlyCreatedTokenPath,
   } = usePipelineStore();
 
   const {
@@ -519,6 +522,39 @@ function TokenEditorContent() {
     setEdges(styledEdges);
   }, [styledEdges, setEdges]);
 
+  // Track last selected path to avoid infinite loops
+  const lastSelectedPathRef = useRef<string | null>(null);
+
+  // Select canvas node when sidebar selection changes
+  useEffect(() => {
+    if (!sidebarSelectedTokenPath || sidebarSelectedTokenPath.length === 0) {
+      return;
+    }
+
+    const pathStr = sidebarSelectedTokenPath.join('.');
+
+    // Skip if we already processed this selection
+    if (lastSelectedPathRef.current === pathStr) {
+      return;
+    }
+    lastSelectedPathRef.current = pathStr;
+
+    // Select the matching node using functional update to avoid dependency on nodes
+    setNodes((nds) => {
+      const matchingNodeId = nds.find(node => {
+        const data = node.data as { path?: string[] };
+        return data.path && data.path.join('.') === pathStr;
+      })?.id;
+
+      if (!matchingNodeId) return nds;
+
+      return nds.map((n) => ({
+        ...n,
+        selected: n.id === matchingNodeId,
+      }));
+    });
+  }, [sidebarSelectedTokenPath, setNodes]);
+
   // Helper to set a value at a path in tokens object
   const setAtPath = useCallback((obj: Record<string, unknown>, path: string[], value: unknown) => {
     let current = obj;
@@ -696,36 +732,58 @@ function TokenEditorContent() {
     { type: 'cubicBezier', label: 'Easing', icon: <CircleDot className="w-4 h-4" />, defaultValue: [0.4, 0, 0.2, 1] },
   ], []);
 
-  // Create new token
+  // Create new token with auto-generated name
   const handleCreateToken = useCallback(
     (type: string, defaultValue: unknown) => {
       if (!activePage) return;
 
-      const name = prompt('Enter token name:');
-      if (!name) return;
+      // Generate unique name
+      const baseName = `new-${type}`;
+      let name = baseName;
+      let counter = 1;
 
-      const path = name.split('.');
+      // Check if name exists at root level
+      while (activePage.tokens[name] !== undefined) {
+        name = `${baseName}-${counter}`;
+        counter++;
+      }
+
+      const path = [name];
       const token = { $value: defaultValue, $type: type };
 
       const newTokens = JSON.parse(JSON.stringify(activePage.tokens));
       setAtPath(newTokens, path, token);
       updatePageTokens(activePage.id, newTokens);
+
+      // Trigger auto-focus in sidebar
+      setNewlyCreatedTokenPath(path);
     },
-    [activePage, updatePageTokens, setAtPath]
+    [activePage, updatePageTokens, setAtPath, setNewlyCreatedTokenPath]
   );
 
-  // Handle creating a group
+  // Handle creating a group with auto-generated name
   const handleCreateGroup = useCallback(() => {
     if (!activePage) return;
 
-    const name = prompt('Enter group name (e.g., "colors.primary"):');
-    if (!name) return;
-    const path = name.split('.');
+    // Generate unique name
+    const baseName = 'new-group';
+    let name = baseName;
+    let counter = 1;
+
+    while (activePage.tokens[name] !== undefined) {
+      name = `${baseName}-${counter}`;
+      counter++;
+    }
+
+    const path = [name];
 
     const newTokens = JSON.parse(JSON.stringify(activePage.tokens));
     setAtPath(newTokens, path, {});
     updatePageTokens(activePage.id, newTokens);
-  }, [activePage, updatePageTokens, setAtPath]);
+
+    // Trigger auto-focus in sidebar
+    setNewlyCreatedTokenPath(path);
+  }, [activePage, updatePageTokens, setAtPath, setNewlyCreatedTokenPath]);
 
   // Node context menu state (for right-clicking on tokens)
   const [contextMenu, setContextMenu] = useState<{
@@ -795,34 +853,6 @@ function TokenEditorContent() {
             <PanelLeft className="w-4 h-4" />
           )}
         </Button>
-
-        <div className="h-6 w-px bg-gray-200 dark:bg-gray-700 mx-2" />
-
-        {/* Add token dropdown */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              <Plus className="w-4 h-4 mr-2" />
-              Add
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            {TOKEN_TYPES.map((tokenType) => (
-              <DropdownMenuItem
-                key={tokenType.type}
-                onClick={() => handleCreateToken(tokenType.type, tokenType.defaultValue)}
-              >
-                {tokenType.icon}
-                <span className="ml-2">{tokenType.label}</span>
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleCreateGroup}>
-              <FolderPlus className="w-4 h-4" />
-              <span className="ml-2">Group</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
 
         <div className="h-6 w-px bg-gray-200 dark:bg-gray-700 mx-2" />
 
@@ -976,6 +1006,7 @@ function TokenEditorContent() {
             {/* Interaction Mode Toggle - Fixed at bottom center */}
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
               <div className="flex items-center gap-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-1">
+                {/* Mode toggle buttons */}
                 <Button
                   variant={interactionMode === 'pan' ? 'default' : 'ghost'}
                   size="sm"
@@ -994,6 +1025,39 @@ function TokenEditorContent() {
                 >
                   <MousePointer2 className="w-4 h-4" />
                 </Button>
+
+                {/* Separator */}
+                <div className="w-px h-6 bg-gray-200 dark:bg-gray-700 mx-1" />
+
+                {/* Add token dropdown - opens upward */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      title="Add token or group"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent side="top" align="center">
+                    {TOKEN_TYPES.map((tokenType) => (
+                      <DropdownMenuItem
+                        key={tokenType.type}
+                        onClick={() => handleCreateToken(tokenType.type, tokenType.defaultValue)}
+                      >
+                        {tokenType.icon}
+                        <span className="ml-2">{tokenType.label}</span>
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleCreateGroup}>
+                      <FolderPlus className="w-4 h-4" />
+                      <span className="ml-2">Group</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 
