@@ -20,10 +20,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import {
   Plus,
-  Undo2,
-  Redo2,
   Download,
-  Upload,
   Layout,
   PanelLeftClose,
   PanelLeft,
@@ -42,7 +39,9 @@ import {
   CircleDot,
   Layers,
   FolderPlus,
+  Home,
 } from 'lucide-react';
+import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -144,12 +143,13 @@ function computeEffectiveTokensForCanvas(
   // Merge layers in order
   for (const layer of relevantLayers) {
     // Find the matching page for this layer
+    const layerVars = layer.variables || [];
     const matchingPage = pages.find(p => {
       if (p.layerId !== layer.id) return false;
-      if (layer.variables.length === 0) {
+      if (layerVars.length === 0) {
         return Object.keys(p.variableValues).length === 0;
       }
-      for (const varKey of layer.variables) {
+      for (const varKey of layerVars) {
         if (p.variableValues[varKey] !== activePage.variableValues[varKey]) {
           return false;
         }
@@ -192,6 +192,11 @@ function TokenEditorContent() {
     sidebarSelectedTokenPath,
     setSidebarSelectedTokenPath,
     setNewlyCreatedTokenPath,
+    // Project/API state
+    projectId,
+    isSaving,
+    lastSaved,
+    saveChanges,
   } = usePipelineStore();
 
   const {
@@ -238,6 +243,28 @@ function TokenEditorContent() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Auto-save when project is loaded and data changes
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    // Only auto-save if a project is loaded
+    if (!projectId) return;
+
+    // Debounce save by 2 seconds after changes
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(() => {
+      saveChanges();
+    }, 2000);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [projectId, pipeline, pages, saveChanges]);
+
   // Multi-layer view: track which variant is selected for each layer with variables
   // Key is layerId, value is the selected variable values for that layer
   const [layerSelections, setLayerSelections] = useState<Record<string, Record<string, string>>>({});
@@ -271,10 +298,11 @@ function TokenEditorContent() {
     let needsUpdate = false;
 
     for (const layer of pipeline.layers) {
-      if (layer.variables.length > 0 && !layerSelections[layer.id]) {
+      const layerVars = layer.variables || [];
+      if (layerVars.length > 0 && !layerSelections[layer.id]) {
         // Use the active page's variable values if it matches this layer, otherwise use first values
         const defaultValues: Record<string, string> = {};
-        for (const varKey of layer.variables) {
+        for (const varKey of layerVars) {
           const variable = pipeline.variables.find(v => v.key === varKey);
           if (variable && variable.values.length > 0) {
             // Check if viewContext has a value for this variable
@@ -305,24 +333,27 @@ function TokenEditorContent() {
     const result: LayerDisplayInfo[] = [];
 
     for (const layer of pipeline.layers) {
+      // Ensure layer.variables is an array (may be undefined when loaded from DB)
+      const layerVars = layer.variables || [];
+
       // Get the variable values for this layer
-      const variableValues = layer.variables.length > 0
+      const variableValues = layerVars.length > 0
         ? layerSelections[layer.id] || {}
         : {};
 
       // Get available slots for this layer
-      const availableSlots = layer.variables.length > 0
+      const availableSlots = layerVars.length > 0
         ? getLayerSlots(layer, pipeline.variables)
         : [];
 
       // Find the page that matches this layer and variable selection
       const matchingPage = pages.find(p => {
         if (p.layerId !== layer.id) return false;
-        if (layer.variables.length === 0) {
+        if (layerVars.length === 0) {
           return Object.keys(p.variableValues).length === 0;
         }
         // Check all variables match
-        for (const varKey of layer.variables) {
+        for (const varKey of layerVars) {
           if (p.variableValues[varKey] !== variableValues[varKey]) {
             return false;
           }
@@ -658,28 +689,6 @@ function TokenEditorContent() {
     [nodes, pages, pipeline.layers, layerSelections, createAliasInPage]
   );
 
-  // Handle file import
-  const handleImport = useCallback(() => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        const text = await file.text();
-        try {
-          const parsed = JSON.parse(text);
-          if (activePage) {
-            updatePageTokens(activePage.id, parsed);
-          }
-        } catch (err) {
-          alert(`Failed to import: ${(err as Error).message}`);
-        }
-      }
-    };
-    input.click();
-  }, [activePage, updatePageTokens]);
-
   // Handle file export
   const handleExport = useCallback(() => {
     if (!activePage) return;
@@ -841,11 +850,28 @@ function TokenEditorContent() {
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
       {/* Toolbar */}
       <div className="h-14 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex items-center px-4 gap-2">
+        {/* Home / Back to Dashboard */}
+        <Link href="/dashboard">
+          <Button
+            variant="ghost"
+            size="sm"
+            title="Back to Dashboard"
+          >
+            <Home className="w-4 h-4" />
+          </Button>
+        </Link>
+
+        {/* Project name */}
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate max-w-[200px]">
+          {pipeline.name}
+        </span>
+
+        <div className="h-6 w-px bg-gray-200 dark:bg-gray-700 mx-2" />
+
         <Button
           variant="ghost"
           size="sm"
           onClick={toggleSidebar}
-          className="mr-2"
         >
           {sidebarOpen ? (
             <PanelLeftClose className="w-4 h-4" />
@@ -856,31 +882,7 @@ function TokenEditorContent() {
 
         <div className="h-6 w-px bg-gray-200 dark:bg-gray-700 mx-2" />
 
-        {/* Undo/Redo - TODO: Implement with pipeline store */}
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled
-          title="Undo (coming soon)"
-        >
-          <Undo2 className="w-4 h-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled
-          title="Redo (coming soon)"
-        >
-          <Redo2 className="w-4 h-4" />
-        </Button>
-
-        <div className="h-6 w-px bg-gray-200 dark:bg-gray-700 mx-2" />
-
-        {/* Import/Export */}
-        <Button variant="ghost" size="sm" onClick={handleImport}>
-          <Upload className="w-4 h-4 mr-2" />
-          Import
-        </Button>
+        {/* Export */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm">
@@ -906,15 +908,29 @@ function TokenEditorContent() {
 
         <div className="h-6 w-px bg-gray-200 dark:bg-gray-700 mx-2" />
 
-        {/* Build Settings */}
+        {/* Settings */}
         <Button
           variant="outline"
           size="sm"
           onClick={() => setBuildSettingsOpen(true)}
         >
           <Settings className="w-4 h-4 mr-2" />
-          Build Settings
+          Settings
         </Button>
+
+        {/* Save status indicator (only shown when project is loaded) */}
+        {projectId && (
+          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 ml-4">
+            {isSaving ? (
+              <>
+                <div className="animate-spin rounded-full h-3 w-3 border-b border-blue-600" />
+                <span>Saving...</span>
+              </>
+            ) : lastSaved ? (
+              <span>Saved</span>
+            ) : null}
+          </div>
+        )}
 
         <div className="flex-1" />
 
@@ -1114,7 +1130,7 @@ function TokenEditorContent() {
         )}
       </div>
 
-      {/* Build Settings Dialog */}
+      {/* Settings Dialog */}
       <PipelineSettingsModal open={buildSettingsOpen} onClose={() => setBuildSettingsOpen(false)} />
 
       {/* Export Dialog */}

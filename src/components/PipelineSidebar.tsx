@@ -9,28 +9,16 @@ import {
   Files,
   Database,
   Plus,
-  Settings,
   Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePipelineStore } from '@/stores/pipelineStore';
-import { formatSlotName, PIPELINE_TEMPLATES } from '@/types/pipeline';
+import { formatSlotName } from '@/types/pipeline';
 import type { PipelineLayer } from '@/types/pipeline';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
-} from '@/components/ui/dropdown-menu';
 import { TokenListPanel } from './TokenListPanel';
-import { PipelineEditor } from './PipelineEditor';
 
 interface LayerItemProps {
   layer: PipelineLayer;
@@ -153,7 +141,7 @@ function LayerItem({ layer, isExpanded, onToggle }: LayerItemProps) {
           {layer.name}
         </span>
 
-        {/* Schema indicator for layers with variables */}
+        {/* Variant count indicator */}
         {hasSlots && (
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
             {slots.length} variants
@@ -237,10 +225,9 @@ function LayerItem({ layer, isExpanded, onToggle }: LayerItemProps) {
 }
 
 export function PipelineSidebar() {
-  const { pipeline, activePageId, pages, getActivePage, viewContext, addLayer, createFromTemplate } = usePipelineStore();
+  const { pipeline, activePageId, pages, getActivePage, viewContext, addLayer } = usePipelineStore();
   const [expandedLayers, setExpandedLayers] = useState<Set<string>>(new Set());
   const [mounted, setMounted] = useState(false);
-  const [editorOpen, setEditorOpen] = useState(false);
   const [addLayerOpen, setAddLayerOpen] = useState(false);
   const [newLayerName, setNewLayerName] = useState('');
   const newLayerInputRef = useRef<HTMLInputElement>(null);
@@ -372,40 +359,6 @@ export function PipelineSidebar() {
                 </div>
               </PopoverContent>
             </Popover>
-            {/* Settings dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" title="Pipeline settings">
-                  <Settings className="w-3.5 h-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setEditorOpen(true)}>
-                  <Settings className="w-4 h-4 mr-2" />
-                  Edit Pipeline
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <Layers className="w-4 h-4 mr-2" />
-                    Load Template
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent>
-                    {PIPELINE_TEMPLATES.map((template, index) => (
-                      <DropdownMenuItem
-                        key={index}
-                        onClick={() => createFromTemplate(index)}
-                      >
-                        <div className="flex flex-col">
-                          <span className="font-medium">{template.name}</span>
-                          <span className="text-xs text-gray-500">{template.description}</span>
-                        </div>
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </div>
       </div>
@@ -455,8 +408,6 @@ export function PipelineSidebar() {
         </div>
       )}
 
-      {/* Pipeline Editor Dialog */}
-      <PipelineEditor open={editorOpen} onOpenChange={setEditorOpen} />
     </div>
   );
 }

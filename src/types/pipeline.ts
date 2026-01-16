@@ -64,6 +64,9 @@ export interface TokenPipeline {
   variables: PipelineVariable[];
   layers: PipelineLayer[];
   buildSettings?: BuildSettings;
+
+  // Database fields (when persisted)
+  versionId?: string; // Parent version in database
 }
 
 /**
@@ -86,6 +89,9 @@ export interface PipelinePage {
    * The tokens defined in this page
    */
   tokens: import('./tokens').DesignTokenFile;
+
+  // Database fields (when persisted)
+  pipelineId?: string; // Parent pipeline in database
 }
 
 /**
@@ -156,12 +162,13 @@ export function getLayerSlots(
   layer: PipelineLayer,
   variables: PipelineVariable[]
 ): Array<Record<string, string>> {
-  if (layer.variables.length === 0) {
+  const layerVarKeys = layer.variables || [];
+  if (layerVarKeys.length === 0) {
     return [{}]; // Static layer, one slot
   }
 
   // Get the variables this layer uses
-  const layerVars = layer.variables.map(key =>
+  const layerVars = layerVarKeys.map(key =>
     variables.find(v => v.key === key)
   ).filter((v): v is PipelineVariable => v !== undefined);
 
@@ -198,7 +205,8 @@ export function findPageForLayerAndConfig(
 ): PipelinePage | undefined {
   // Get the variable values needed for this layer from the config
   const neededValues: Record<string, string> = {};
-  for (const varKey of layer.variables) {
+  const layerVarKeys = layer.variables || [];
+  for (const varKey of layerVarKeys) {
     if (config.selections[varKey]) {
       neededValues[varKey] = config.selections[varKey];
     }

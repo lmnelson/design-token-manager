@@ -252,9 +252,9 @@ export function BuildPreview({ open, onOpenChange }: BuildPreviewProps) {
                             </span>
 
                             {/* Variable values */}
-                            {item.layer.variables.length > 0 && (
+                            {(item.layer.variables || []).length > 0 && (
                               <span className="text-xs text-blue-600 dark:text-blue-400 font-mono">
-                                ({item.layer.variables.map(v => selectedBuildConfig.selections[v]).join(', ')})
+                                ({(item.layer.variables || []).map(v => selectedBuildConfig.selections[v]).join(', ')})
                               </span>
                             )}
 

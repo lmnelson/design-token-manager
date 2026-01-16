@@ -69,6 +69,16 @@ interface PipelineStore {
   pipeline: TokenPipeline;
   pages: PipelinePage[];
 
+  // Project context (when loaded from database)
+  projectId: string | null;
+  versionId: string | null;
+
+  // Loading/saving state
+  isLoading: boolean;
+  isSaving: boolean;
+  lastSaved: Date | null;
+  saveError: string | null;
+
   // UI State
   activePageId: string | null;
   selectedBuildConfig: BuildConfig | null;
@@ -96,6 +106,11 @@ interface PipelineStore {
   updateLayer: (id: string, updates: Partial<PipelineLayer>) => void;
   removeLayer: (id: string) => void;
   reorderLayers: (fromIndex: number, toIndex: number) => void;
+
+  // Layer variants (simplified API)
+  getLayerVariants: (layerId: string) => string[];
+  addVariantToLayer: (layerId: string, variantName: string) => void;
+  removeVariantFromLayer: (layerId: string, variantName: string) => void;
 
   // Page management
   getOrCreatePage: (layerId: string, variableValues: Record<string, string>) => PipelinePage;
@@ -145,6 +160,11 @@ interface PipelineStore {
 
   // Sidebar selection (for canvas highlighting)
   setSidebarSelectedTokenPath: (path: string[] | null) => void;
+
+  // Project/API operations
+  loadProject: (projectId: string, versionId?: string) => Promise<void>;
+  saveChanges: () => Promise<void>;
+  resetToLocal: () => void;
 }
 
 // Default pipeline (Simple Light/Dark)
@@ -251,6 +271,18 @@ export const usePipelineStore = create<PipelineStore>()(
       // Initial state
       pipeline: defaultPipeline,
       pages: defaultPages,
+
+      // Project context
+      projectId: null,
+      versionId: null,
+
+      // Loading/saving state
+      isLoading: false,
+      isSaving: false,
+      lastSaved: null,
+      saveError: null,
+
+      // UI state
       activePageId: 'page-primitives',
       selectedBuildConfig: null,
       viewContext: null,
@@ -460,6 +492,74 @@ export const usePipelineStore = create<PipelineStore>()(
             },
           };
         });
+      },
+
+      // Layer variants (simplified API) - each layer gets its own variable
+      getLayerVariants: (layerId) => {
+        const { pipeline } = get();
+        const layer = pipeline.layers.find(l => l.id === layerId);
+        if (!layer) return [];
+
+        // Get the layer's variable key (first one, since we're using simplified single-variable model)
+        const varKey = (layer.variables || [])[0];
+        if (!varKey) return [];
+
+        // Find the variable and return its values
+        const variable = pipeline.variables.find(v => v.key === varKey);
+        return variable?.values || [];
+      },
+
+      addVariantToLayer: (layerId, variantName) => {
+        const { pipeline } = get();
+        const layer = pipeline.layers.find(l => l.id === layerId);
+        if (!layer) return;
+
+        const layerVars = layer.variables || [];
+        const varKey = `${layerId}-variant`;
+
+        // Check if layer already has a variable
+        if (layerVars.length > 0) {
+          // Add value to existing variable
+          const existingVarKey = layerVars[0];
+          const existingVar = pipeline.variables.find(v => v.key === existingVarKey);
+          if (existingVar && !existingVar.values.includes(variantName)) {
+            get().addVariableValue(existingVar.id, variantName);
+          }
+        } else {
+          // Create new variable for this layer
+          get().addVariable({
+            name: `${layer.name} Variant`,
+            key: varKey,
+            values: [variantName],
+          });
+
+          // Assign variable to layer
+          get().updateLayer(layerId, {
+            variables: [varKey],
+          });
+        }
+      },
+
+      removeVariantFromLayer: (layerId, variantName) => {
+        const { pipeline } = get();
+        const layer = pipeline.layers.find(l => l.id === layerId);
+        if (!layer) return;
+
+        const layerVars = layer.variables || [];
+        if (layerVars.length === 0) return;
+
+        const varKey = layerVars[0];
+        const variable = pipeline.variables.find(v => v.key === varKey);
+        if (!variable) return;
+
+        if (variable.values.length <= 1) {
+          // Last variant - remove the variable entirely and make layer static
+          get().removeVariable(variable.id);
+          get().updateLayer(layerId, { variables: [] });
+        } else {
+          // Remove just this variant value
+          get().removeVariableValue(variable.id, variantName);
+        }
       },
 
       // Page management
@@ -852,6 +952,154 @@ export const usePipelineStore = create<PipelineStore>()(
       // Sidebar selection
       setSidebarSelectedTokenPath: (path) => {
         set({ sidebarSelectedTokenPath: path });
+      },
+
+      // Load project from API
+      loadProject: async (projectId, versionId) => {
+        set({ isLoading: true, saveError: null });
+        try {
+          // First get project to find the draft version if not specified
+          const projectRes = await fetch(`/api/projects/${projectId}`);
+          if (!projectRes.ok) {
+            throw new Error('Failed to load project');
+          }
+          const project = await projectRes.json();
+
+          // Use provided versionId or find draft version
+          const targetVersionId =
+            versionId ||
+            project.versions.find((v: { status: string }) => v.status === 'DRAFT')?.id ||
+            project.versions[0]?.id;
+
+          if (!targetVersionId) {
+            throw new Error('No version found');
+          }
+
+          // Load version with pipeline and pages
+          const versionRes = await fetch(
+            `/api/projects/${projectId}/versions/${targetVersionId}`
+          );
+          if (!versionRes.ok) {
+            throw new Error('Failed to load version');
+          }
+          const version = await versionRes.json();
+
+          // Transform data for store
+          const pipelineData = version.pipeline?.data || {};
+          // Normalize layers to ensure variables is always an array
+          const normalizedLayers = (pipelineData.layers || []).map((layer: PipelineLayer) => ({
+            ...layer,
+            variables: layer.variables || [],
+          }));
+          const pipeline: TokenPipeline = {
+            id: version.pipeline?.id || generateId('pipeline'),
+            name: project.name,
+            description: project.description,
+            variables: pipelineData.variables || [],
+            layers: normalizedLayers,
+            buildSettings: pipelineData.buildSettings,
+            versionId: targetVersionId,
+          };
+
+          const pages: PipelinePage[] = (version.pipeline?.pages || []).map(
+            (p: { id: string; layerId: string; variableValues: Record<string, string>; tokens: DesignTokenFile }) => ({
+              id: p.id,
+              layerId: p.layerId,
+              variableValues: p.variableValues || {},
+              tokens: p.tokens || {},
+              pipelineId: version.pipeline?.id,
+            })
+          );
+
+          set({
+            projectId,
+            versionId: targetVersionId,
+            pipeline,
+            pages,
+            activePageId: pages[0]?.id || null,
+            isLoading: false,
+            lastSaved: new Date(),
+          });
+        } catch (error) {
+          set({
+            isLoading: false,
+            saveError: error instanceof Error ? error.message : 'Failed to load project',
+          });
+        }
+      },
+
+      // Save changes to API
+      saveChanges: async () => {
+        const { projectId, versionId, pipeline, pages, isSaving } = get();
+
+        // Only save if we have a project loaded
+        if (!projectId || !versionId || isSaving) return;
+
+        set({ isSaving: true, saveError: null });
+
+        try {
+          // Save pipeline data
+          const pipelineRes = await fetch(
+            `/api/projects/${projectId}/versions/${versionId}/pipeline`,
+            {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                data: {
+                  variables: pipeline.variables,
+                  layers: pipeline.layers,
+                  buildSettings: pipeline.buildSettings,
+                },
+              }),
+            }
+          );
+
+          if (!pipelineRes.ok) {
+            throw new Error('Failed to save pipeline');
+          }
+
+          // Save pages
+          const pagesRes = await fetch(
+            `/api/projects/${projectId}/versions/${versionId}/pages`,
+            {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                pages: pages.map((p) => ({
+                  layerId: p.layerId,
+                  variableValues: p.variableValues,
+                  tokens: p.tokens,
+                })),
+              }),
+            }
+          );
+
+          if (!pagesRes.ok) {
+            throw new Error('Failed to save pages');
+          }
+
+          set({ isSaving: false, lastSaved: new Date() });
+        } catch (error) {
+          set({
+            isSaving: false,
+            saveError: error instanceof Error ? error.message : 'Failed to save',
+          });
+        }
+      },
+
+      // Reset to local mode (clears project context)
+      resetToLocal: () => {
+        set({
+          projectId: null,
+          versionId: null,
+          pipeline: defaultPipeline,
+          pages: defaultPages,
+          activePageId: 'page-primitives',
+          isLoading: false,
+          isSaving: false,
+          lastSaved: null,
+          saveError: null,
+        });
       },
     }),
     {

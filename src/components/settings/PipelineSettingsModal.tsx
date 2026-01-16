@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { usePipelineStore } from '@/stores/pipelineStore';
+import { LayersVariablesTab } from './LayersVariablesTab';
 import { PlatformsTab } from './PlatformsTab';
 import { TransformsTab } from './TransformsTab';
 import { PackageTab } from './PackageTab';
@@ -23,7 +24,7 @@ interface PipelineSettingsModalProps {
 }
 
 export function PipelineSettingsModal({ open, onClose }: PipelineSettingsModalProps) {
-  const { pipeline, setPipeline } = usePipelineStore();
+  const { pipeline, setPipeline, getLayerVariants } = usePipelineStore();
 
   const updatePipelineField = (field: 'name' | 'description', value: string) => {
     setPipeline({
@@ -45,6 +46,7 @@ export function PipelineSettingsModal({ open, onClose }: PipelineSettingsModalPr
         <Tabs defaultValue="general" className="flex-1 flex flex-col overflow-hidden">
           <TabsList className="w-full justify-start">
             <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="layers">Layers & Variables</TabsTrigger>
             <TabsTrigger value="platforms">Platforms</TabsTrigger>
             <TabsTrigger value="transforms">Transforms</TabsTrigger>
             <TabsTrigger value="package">Package</TabsTrigger>
@@ -80,13 +82,7 @@ export function PipelineSettingsModal({ open, onClose }: PipelineSettingsModalPr
 
                 <div>
                   <h3 className="text-sm font-medium mb-3">Pipeline Overview</h3>
-                  <div className="grid grid-cols-3 gap-4 text-sm">
-                    <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                      <div className="text-2xl font-bold text-blue-500">
-                        {pipeline.variables.length}
-                      </div>
-                      <div className="text-xs text-gray-500">Variables</div>
-                    </div>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
                     <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
                       <div className="text-2xl font-bold text-green-500">
                         {pipeline.layers.length}
@@ -103,71 +99,54 @@ export function PipelineSettingsModal({ open, onClose }: PipelineSettingsModalPr
                 </div>
 
                 <div>
-                  <h3 className="text-sm font-medium mb-3">Variables</h3>
-                  {pipeline.variables.length === 0 ? (
-                    <p className="text-xs text-gray-500">No variables defined</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {pipeline.variables.map((variable) => (
-                        <div
-                          key={variable.id}
-                          className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded text-xs"
-                        >
-                          <div>
-                            <span className="font-medium">{variable.name}</span>
-                            <span className="text-gray-500 ml-2">({variable.key})</span>
-                          </div>
-                          <div className="flex gap-1">
-                            {variable.values.map((value) => (
-                              <span
-                                key={value}
-                                className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded"
-                              >
-                                {value}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div>
                   <h3 className="text-sm font-medium mb-3">Layers</h3>
                   <div className="space-y-2">
                     {[...pipeline.layers]
                       .sort((a, b) => a.order - b.order)
-                      .map((layer) => (
-                        <div
-                          key={layer.id}
-                          className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded text-xs"
-                        >
-                          <div>
-                            <span className="font-medium">{layer.name}</span>
-                            {layer.description && (
-                              <span className="text-gray-500 ml-2">- {layer.description}</span>
-                            )}
+                      .map((layer) => {
+                        const variants = getLayerVariants(layer.id);
+                        return (
+                          <div
+                            key={layer.id}
+                            className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded text-xs"
+                          >
+                            <div>
+                              <span className="font-medium">{layer.name}</span>
+                              {layer.description && (
+                                <span className="text-gray-500 ml-2">- {layer.description}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {variants.length > 0 ? (
+                                <div className="flex gap-1">
+                                  {variants.map((variant) => (
+                                    <span
+                                      key={variant}
+                                      className="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 rounded text-[10px]"
+                                    >
+                                      {variant}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">Static</span>
+                              )}
+                              {layer.required && (
+                                <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded text-[10px]">
+                                  Required
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {layer.variables.length > 0 ? (
-                              <span className="text-gray-500">
-                                Variables: {layer.variables.join(', ')}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">Static</span>
-                            )}
-                            {layer.required && (
-                              <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded text-[10px]">
-                                Required
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                   </div>
                 </div>
               </div>
+            </TabsContent>
+
+            <TabsContent value="layers" className="m-0">
+              <LayersVariablesTab />
             </TabsContent>
 
             <TabsContent value="platforms" className="m-0">

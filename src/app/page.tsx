@@ -1,7 +1,10 @@
 import Link from 'next/link';
-import { Palette, Layers, ArrowRight, Figma, FileJson, GitBranch } from 'lucide-react';
+import { Palette, Layers, ArrowRight, Figma, FileJson, GitBranch, LogOut } from 'lucide-react';
+import { auth0 } from '@/lib/auth0';
 
-export default function Home() {
+export default async function Home() {
+  const session = await auth0.getSession();
+  const user = session?.user;
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900">
       {/* Header */}
@@ -14,18 +17,43 @@ export default function Home() {
             <span className="font-semibold text-lg">Design Token Studio</span>
           </div>
           <nav className="flex items-center gap-4">
-            <Link
-              href="/tokens"
-              className="text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
-            >
-              Token Editor
-            </Link>
-            <Link
-              href="/components"
-              className="text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
-            >
-              Component Mapper
-            </Link>
+            {user ? (
+              <>
+                <Link
+                  href="/dashboard"
+                  className="text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+                >
+                  Dashboard
+                </Link>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                    {user.name || user.email}
+                  </span>
+                  <a
+                    href="/auth/logout"
+                    className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Log out
+                  </a>
+                </div>
+              </>
+            ) : (
+              <>
+                <a
+                  href="/auth/login"
+                  className="text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+                >
+                  Log in
+                </a>
+                <a
+                  href="/auth/login?screen_hint=signup"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors"
+                >
+                  Sign up
+                </a>
+              </>
+            )}
           </nav>
         </div>
       </header>
@@ -45,19 +73,39 @@ export default function Home() {
             W3C Design Tokens Format compliant with Figma integration.
           </p>
           <div className="flex items-center justify-center gap-4">
-            <Link
-              href="/tokens"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg font-medium hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors"
-            >
-              Open Token Editor
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-            <Link
-              href="/components"
-              className="inline-flex items-center gap-2 px-6 py-3 border border-gray-300 dark:border-gray-700 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-            >
-              Component Mapper
-            </Link>
+            {user ? (
+              <>
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg font-medium hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors"
+                >
+                  Go to Dashboard
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+                <Link
+                  href="/tokens"
+                  className="inline-flex items-center gap-2 px-6 py-3 border border-gray-300 dark:border-gray-700 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  Open Token Editor
+                </Link>
+              </>
+            ) : (
+              <>
+                <a
+                  href="/auth/login?screen_hint=signup"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg font-medium hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors"
+                >
+                  Get Started
+                  <ArrowRight className="w-4 h-4" />
+                </a>
+                <a
+                  href="/auth/login"
+                  className="inline-flex items-center gap-2 px-6 py-3 border border-gray-300 dark:border-gray-700 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  Log in
+                </a>
+              </>
+            )}
           </div>
         </div>
 

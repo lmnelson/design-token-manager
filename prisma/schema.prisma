@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Auth0 user reference
+model User {
+  id        String   @id @default(cuid())
+  auth0Id   String   @unique // Auth0 sub claim
+  email     String   @unique
+  name      String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships TeamMember[]
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique // URL-friendly identifier
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members  TeamMember[]
+  projects Project[]
+}
+
+enum TeamRole {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  userId    String
+  teamId    String
+  role      TeamRole @default(EDITOR)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+  @@index([teamId])
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  teamId      String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  team     Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  versions Version[]
+
+  @@index([teamId])
+}
+
+enum VersionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model Version {
+  id          String        @id @default(cuid())
+  projectId   String
+  name        String // "draft", "v1.0.0", etc.
+  status      VersionStatus @default(DRAFT)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  publishedAt DateTime?
+
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  pipeline Pipeline?
+
+  @@index([projectId])
+}
+
+// Stores the full pipeline configuration
+model Pipeline {
+  id        String   @id @default(cuid())
+  versionId String   @unique
+  data      Json // TokenPipeline (layers, variables, buildSettings)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  version Version @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  pages   Page[]
+}
+
+// Individual token pages (layer + variable combination)
+model Page {
+  id             String   @id @default(cuid())
+  pipelineId     String
+  layerId        String // References layer.id within pipeline.data
+  variableValues Json // Record<string, string> of variable selections
+  tokens         Json // DesignTokenFile content
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  pipeline Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+
+  @@index([pipelineId])
+}

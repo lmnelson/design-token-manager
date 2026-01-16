@@ -60,16 +60,17 @@ function computeEffectiveTokens(
   for (const layer of sortedLayers) {
     // Find the page for this layer that matches the active page's variable values
     // (or has no variables for static layers)
+    const layerVars = layer.variables || [];
     const matchingPage = pages.find(p => {
       if (p.layerId !== layer.id) return false;
 
       // For static layers (no variables), any page for that layer works
-      if (layer.variables.length === 0) {
+      if (layerVars.length === 0) {
         return Object.keys(p.variableValues).length === 0;
       }
 
       // For variable layers, match the variable values from active page
-      for (const varKey of layer.variables) {
+      for (const varKey of layerVars) {
         if (p.variableValues[varKey] !== activePage.variableValues[varKey]) {
           return false;
         }
@@ -456,12 +457,13 @@ export function TokenListPanel() {
       const layer = pipeline.layers.find(l => l.id === layerId);
       if (!layer) return;
 
+      const layerVars = layer.variables || [];
       const matchingPage = pages.find(p => {
         if (p.layerId !== layerId) return false;
-        if (layer.variables.length === 0) {
+        if (layerVars.length === 0) {
           return Object.keys(p.variableValues).length === 0;
         }
-        for (const varKey of layer.variables) {
+        for (const varKey of layerVars) {
           if (p.variableValues[varKey] !== activePage.variableValues[varKey]) {
             return false;
           }
