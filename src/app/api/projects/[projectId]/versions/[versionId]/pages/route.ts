@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { checkProjectAccess } from '@/lib/auth';
 
@@ -137,7 +138,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     }
 
     // Delete existing pages and create new ones in a transaction
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.page.deleteMany({
         where: { pipelineId: pipeline.id },
       });
