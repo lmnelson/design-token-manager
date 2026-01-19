@@ -91,18 +91,18 @@ export default async function Home() {
               </>
             ) : (
               <>
-                <a
-                  href="/auth/login?screen_hint=signup"
+                <Link
+                  href="/tokens"
                   className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg font-medium hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors"
                 >
-                  Get Started
+                  Try it Free
                   <ArrowRight className="w-4 h-4" />
-                </a>
+                </Link>
                 <a
-                  href="/auth/login"
+                  href="/auth/login?screen_hint=signup"
                   className="inline-flex items-center gap-2 px-6 py-3 border border-gray-300 dark:border-gray-700 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                 >
-                  Log in
+                  Sign up
                 </a>
               </>
             )}

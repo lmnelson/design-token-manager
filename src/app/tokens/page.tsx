@@ -850,21 +850,32 @@ function TokenEditorContent() {
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
       {/* Toolbar */}
       <div className="h-14 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex items-center px-4 gap-2">
-        {/* Home / Back to Dashboard */}
-        <Link href="/dashboard">
+        {/* Home / Back */}
+        <Link href={projectId ? "/dashboard" : "/"}>
           <Button
             variant="ghost"
             size="sm"
-            title="Back to Dashboard"
+            title={projectId ? "Back to Dashboard" : "Back to Home"}
           >
             <Home className="w-4 h-4" />
           </Button>
         </Link>
 
-        {/* Project name */}
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate max-w-[200px]">
-          {pipeline.name}
-        </span>
+        {/* Project name or Demo mode indicator */}
+        {projectId ? (
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate max-w-[200px]">
+            {pipeline.name}
+          </span>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-xs px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full font-medium">
+              Demo Mode
+            </span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Saved to browser
+            </span>
+          </div>
+        )}
 
         <div className="h-6 w-px bg-gray-200 dark:bg-gray-700 mx-2" />
 
@@ -919,7 +930,7 @@ function TokenEditorContent() {
         </Button>
 
         {/* Save status indicator (only shown when project is loaded) */}
-        {projectId && (
+        {projectId ? (
           <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 ml-4">
             {isSaving ? (
               <>
@@ -930,6 +941,13 @@ function TokenEditorContent() {
               <span>Saved</span>
             ) : null}
           </div>
+        ) : (
+          <a
+            href="/auth/login?screen_hint=signup"
+            className="ml-4 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            Sign up to save to cloud →
+          </a>
         )}
 
         <div className="flex-1" />

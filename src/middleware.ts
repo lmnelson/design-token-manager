@@ -9,8 +9,8 @@ export const config = {
   matcher: [
     // Auth routes (handled by Auth0)
     '/auth/:path*',
-    // Protected routes
-    '/tokens/:path*',
+    // Protected routes (tokens with project ID, not base /tokens which is demo mode)
+    '/tokens/:projectId/:path*',
     '/projects/:path*',
     '/teams/:path*',
     '/dashboard/:path*',
